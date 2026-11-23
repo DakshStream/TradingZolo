@@ -149,16 +149,39 @@ async function fetchIndiaIndices() {
       const change = Number(item.d[1]);
       return { ...spec, price, previousClose: change ? price / (1 + change / 100) : price, change, high: Number(item.d[3]), low: Number(item.d[4]), volume: 0, timestamp: Date.now() };
     }).filter((item) => item.price > 0);
-    if (!indices.length) throw new Error('No NSE/SENSEX index data returned');
+    if (!indices.length) throw new Error('TradingView returned no indices');
     latest = indices;
-    upstreamReady = true;
-    const message = JSON.stringify({ type: 'indices', data: indices, source: 'TradingView / NSE & BSE', timestamp: Date.now() });
-    for (const client of clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(message);
+  } catch (scannerError) {
+    try {
+      const specs = [
+        { symbol: '^NSEI', name: 'NIFTY 50', shortName: 'NIFTY' },
+        { symbol: '^BSESN', name: 'SENSEX', shortName: 'SENSEX' },
+        { symbol: '^NSEBANK', name: 'NIFTY BANK', shortName: 'BANKNIFTY' }
+      ];
+      const indices = [];
+      for (const spec of specs) {
+        const payload = await getYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(spec.symbol)}?range=1d&interval=1m`);
+        const result = payload.chart?.result?.[0];
+        if (!result) continue;
+        const quote = result.indicators?.quote?.[0] || {};
+        const closes = (quote.close || []).filter(Number.isFinite);
+        const meta = result.meta || {};
+        const price = Number(meta.regularMarketPrice || closes.at(-1) || 0);
+        const previousClose = Number(meta.chartPreviousClose || meta.previousClose || closes[0] || price);
+        indices.push({ ...spec, price, previousClose, change: previousClose ? ((price - previousClose) / previousClose) * 100 : 0, high: Number(meta.regularMarketDayHigh || Math.max(...closes)), low: Number(meta.regularMarketDayLow || Math.min(...closes)), volume: 0, timestamp: Date.now() });
+      }
+      if (!indices.length) throw new Error('Yahoo returned no indices');
+      latest = indices;
+    } catch (fallbackError) {
+      console.error('India index sources failed:', scannerError.message, fallbackError.message);
+      if (!latest.length) return;
     }
-  } catch (error) {
-    upstreamReady = false;
-    console.error('India index snapshot failed:', error.message);
+  }
+  if (!latest.length) return;
+  upstreamReady = true;
+  const message = JSON.stringify({ type: 'indices', data: latest, source: 'Live market data', timestamp: Date.now() });
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) client.send(message);
   }
 }
 
