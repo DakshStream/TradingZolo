@@ -66,7 +66,11 @@ function connectUpstream() {
 
 function getJson(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'TradingZolo/1.0' } }, (response) => {
+    https.get(url, { headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36',
+      'Accept': 'application/json,text/plain,*/*',
+      'Accept-Language': 'en-US,en;q=0.9'
+    } }, (response) => {
       let body = '';
       response.on('data', (chunk) => { body += chunk; });
       response.on('end', () => {
@@ -100,6 +104,7 @@ function postJson(url, body) {
 }
 
 let restTimer;
+const historyCache = new Map();
 
 async function fetchRestSnapshot() {
   try {
@@ -197,6 +202,11 @@ app.get('/api/history/:symbol', async (req, res) => {
   const range = rangeMap[req.query.range] ? req.query.range : 'today';
   if (!allowed.includes(symbol)) return res.status(400).json({ error: 'Unsupported index symbol' });
   const [period, interval] = rangeMap[range];
+  const cacheKey = `${symbol}|${period}|${interval}`;
+  if (historyCache.has(cacheKey)) {
+    const cached = historyCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < 5 * 60 * 1000) return res.json(cached.data);
+  }
   try {
     const payload = await getYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${period}&interval=${interval}`);
     const result = payload.chart?.result?.[0];
@@ -210,8 +220,14 @@ app.get('/api/history/:symbol', async (req, res) => {
       close: quote.close?.[index] ?? null,
       volume: quote.volume?.[index] ?? null
     })).filter((point) => Number.isFinite(point.close));
-    res.json({ symbol, range, source: 'Yahoo Finance', timestamp: Date.now(), points });
+    const response = { symbol, range, source: 'Yahoo Finance', timestamp: Date.now(), points };
+    historyCache.set(cacheKey, { timestamp: Date.now(), data: response });
+    res.json(response);
   } catch (error) {
+    if (historyCache.has(cacheKey)) {
+      const cached = historyCache.get(cacheKey);
+      return res.json({ ...cached.data, timestamp: Date.now(), cached: true });
+    }
     res.status(502).json({ error: 'Unable to retrieve chart history', detail: error.message });
   }
 });
