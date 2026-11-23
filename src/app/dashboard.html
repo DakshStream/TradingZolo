@@ -1,0 +1,90 @@
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">TZ</span><span>TRADINGZOLO</span></div>
+    <nav>
+      <button [class.active]="activeTab() === 'overview'" (click)="setTab('overview')">Overview</button>
+      <button [class.active]="activeTab() === 'indices'" (click)="setTab('indices')">Indices</button>
+      <button [class.active]="activeTab() === 'watchlist'" (click)="setTab('watchlist')">Watchlist</button>
+    </nav>
+    <div class="connection" [class.live]="market.status() === 'live'"><i></i>{{ market.status() }}</div>
+  </header>
+
+  <main>
+    <section class="headline">
+      <div><p class="eyebrow">INDIA MARKET · NSE & BSE</p><h1>Market monitor</h1></div>
+      <div class="source"><span>REAL-TIME FEED</span><strong>YAHOO FINANCE</strong></div>
+    </section>
+
+    @if (activeTab() === 'overview') {
+      <section class="index-cards">
+        @for (index of market.indices(); track trackIndex($index, index)) {
+          <button class="index-card" [class.selected]="market.selected() === index.symbol" (click)="market.selectIndex(index.symbol)">
+            <div><span>{{ index.name }}</span><small>{{ index.shortName }}</small></div>
+            <strong>{{ formatPrice(index.price) }}</strong>
+            <p [class.negative]="index.change < 0" [class.positive]="index.change >= 0">{{ index.change >= 0 ? '+' : '' }}{{ index.change.toFixed(2) }}%</p>
+          </button>
+        }
+      </section>
+
+      <section class="chart-panel">
+        <div class="chart-header">
+          <div>
+            <p>{{ selectedIndex()?.name || 'NIFTY 50' }}</p>
+            <h2>{{ formatPrice(selectedIndex()?.price || 0) }}</h2>
+          </div>
+          <div class="ranges">
+            <button [class.active]="market.range() === 'today'" (click)="market.selectRange('today')">Today</button>
+            <button [class.active]="market.range() === '30d'" (click)="market.selectRange('30d')">30 Days</button>
+            <button [class.active]="market.range() === '1y'" (click)="market.selectRange('1y')">1 Year</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <svg viewBox="0 0 800 300" preserveAspectRatio="none" role="img" aria-label="Live index price chart">
+            <defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a6ff4d" stop-opacity=".28"/><stop offset="1" stop-color="#a6ff4d" stop-opacity="0"/></linearGradient></defs>
+            <g class="grid"><line x1="10" y1="60" x2="790" y2="60"/><line x1="10" y1="150" x2="790" y2="150"/><line x1="10" y1="240" x2="790" y2="240"/></g>
+            <path class="area" [attr.d]="chartArea()"/><path class="line" [attr.d]="chartPath()"/> 
+          </svg>
+          <div class="chart-status"><i></i>{{ market.status() }} · {{ formatTime(market.lastUpdated()) }}</div>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        @for (index of market.indices(); track trackIndex($index, index)) {
+          <article class="stat-panel">
+            <div class="panel-head"><p>{{ index.shortName }}</p><span>DAY RANGE</span></div>
+            <div class="range-bar"><i [style.width.%]="((index.price - index.low) / ((index.high - index.low) || 1) * 100)"></i></div>
+            <div class="range-values"><span>{{ formatPrice(index.low) }}</span><strong>{{ formatPrice(index.price) }}</strong><span>{{ formatPrice(index.high) }}</span></div>
+          </article>
+        }
+      </section>
+    }
+
+    @if (activeTab() === 'indices') {
+      <section class="indices-table panel">
+        <div class="panel-head"><div><p>Exchange</p><h2>Indian market indices</h2></div><span>LIVE</span></div>
+        <div class="table-head"><b>Index</b><b>Last traded</b><b>Change</b><b>Day low</b><b>Day high</b></div>
+        @for (index of market.indices(); track trackIndex($index, index)) {
+          <button class="market-row" (click)="market.selectIndex(index.symbol); setTab('overview')">
+            <div><strong>{{ index.name }}</strong><small>{{ index.shortName }}</small></div>
+            <b>{{ formatPrice(index.price) }}</b>
+            <strong [class.negative]="index.change < 0" [class.positive]="index.change >= 0">{{ index.change >= 0 ? '+' : '' }}{{ index.change.toFixed(2) }}%</strong>
+            <span>{{ formatPrice(index.low) }}</span><span>{{ formatPrice(index.high) }}</span>
+          </button>
+        }
+      </section>
+    }
+
+    @if (activeTab() === 'watchlist') {
+      <section class="watchlist panel">
+        <div class="panel-head"><div><p>Watchlist</p><h2>Your indices</h2></div><span>LIVE</span></div>
+        @for (index of market.indices(); track trackIndex($index, index)) {
+          <button class="watch-row" (click)="market.selectIndex(index.symbol); setTab('overview')">
+            <i>{{ index.shortName.charAt(0) }}</i><div><strong>{{ index.name }}</strong><small>{{ index.symbol }}</small></div>
+            <b>{{ formatPrice(index.price) }}</b><strong [class.negative]="index.change < 0" [class.positive]="index.change >= 0">{{ index.change.toFixed(2) }}%</strong>
+          </button>
+        }
+      </section>
+    }
+  </main>
+  <app-error-banner />
+</div>
