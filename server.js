@@ -123,7 +123,7 @@ async function fetchIndiaIndices() {
   try {
     const indices = [];
     for (const index of INDIA_INDICES) {
-      const payload = await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(index.symbol)}?range=1d&interval=1m`);
+      const payload = await getYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(index.symbol)}?range=1d&interval=1m`);
       const result = payload.chart?.result?.[0];
       if (!result) continue;
       const quotes = result.indicators?.quote?.[0] || {};
@@ -172,7 +172,7 @@ app.get('/api/history/:symbol', async (req, res) => {
   if (!allowed.includes(symbol)) return res.status(400).json({ error: 'Unsupported index symbol' });
   const [period, interval] = rangeMap[range];
   try {
-    const payload = await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${period}&interval=${interval}`);
+    const payload = await getYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${period}&interval=${interval}`);
     const result = payload.chart?.result?.[0];
     if (!result) throw new Error('No chart result');
     const quote = result.indicators?.quote?.[0] || {};
@@ -211,3 +211,17 @@ app.get(/.*/, (req, res, next) => {
   if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/stream') return next();
   res.sendFile(path.join(distDir, 'index.html'));
 });
+
+async function getYahooJson(url) {
+  try {
+    return await getJson(url);
+  } catch (primaryError) {
+    if (!url.includes('query1.finance.yahoo.com')) throw primaryError;
+    const fallbackUrl = url.replace('query1.finance.yahoo.com', 'query2.finance.yahoo.com');
+    try {
+      return await getJson(fallbackUrl);
+    } catch (fallbackError) {
+      throw new Error(`${primaryError.message}; fallback: ${fallbackError.message}`);
+    }
+  }
+}

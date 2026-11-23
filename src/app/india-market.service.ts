@@ -19,7 +19,25 @@ export class IndiaMarketService {
   private retry = 0;
 
   constructor(private zone: NgZone) {
-    this.fetchHistory();
+    void this.fetchIndices();
+    void this.fetchHistory();
+    window.setInterval(() => void this.fetchIndices(), 15000);
+  }
+
+  private async fetchIndices(): Promise<void> {
+    try {
+      const response = await fetch('/api/indices');
+      if (!response.ok) throw new Error(`Index request failed: ${response.status}`);
+      const payload = await response.json();
+      if (payload.data?.length) {
+        this.indices.set(payload.data);
+        this.lastUpdated.set(payload.timestamp);
+        if (this.status() !== 'reconnecting') this.status.set('live');
+      }
+    } catch (error) {
+      console.error(error);
+      if (!this.indices().length) this.status.set('offline');
+    }
   }
 
   connect(): void {
