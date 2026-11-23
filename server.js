@@ -80,6 +80,25 @@ function getJson(url) {
   });
 }
 
+function postJson(url, body) {
+  const data = JSON.stringify(body);
+  return new Promise((resolve, reject) => {
+    const request = https.request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), 'User-Agent': 'TradingZolo/1.0' }
+    }, (response) => {
+      let payload = '';
+      response.on('data', (chunk) => { payload += chunk; });
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) return reject(new Error(`HTTP ${response.statusCode}`));
+        try { resolve(JSON.parse(payload)); } catch (error) { reject(error); }
+      });
+    });
+    request.on('error', reject);
+    request.end(data);
+  });
+}
+
 let restTimer;
 
 async function fetchRestSnapshot() {
@@ -113,43 +132,27 @@ async function fetchRestSnapshot() {
   }
 }
 
-const INDIA_INDICES = [
-  { symbol: '^NSEI', name: 'NIFTY 50', shortName: 'NIFTY' },
-  { symbol: '^BSESN', name: 'SENSEX', shortName: 'SENSEX' },
-  { symbol: '^NSEBANK', name: 'NIFTY BANK', shortName: 'BANKNIFTY' }
-];
-
 async function fetchIndiaIndices() {
   try {
-    const indices = [];
-    for (const index of INDIA_INDICES) {
-      const payload = await getYahooJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(index.symbol)}?range=1d&interval=1m`);
-      const result = payload.chart?.result?.[0];
-      if (!result) continue;
-      const quotes = result.indicators?.quote?.[0] || {};
-      const closes = (quotes.close || []).filter((value) => Number.isFinite(value));
-      const timestamp = result.timestamp?.at(-1) || Math.floor(Date.now() / 1000);
-      const meta = result.meta || {};
-      const price = Number(meta.regularMarketPrice || closes.at(-1) || 0);
-      const previousClose = Number(meta.chartPreviousClose || meta.previousClose || closes[0] || price);
-      const change = previousClose ? ((price - previousClose) / previousClose) * 100 : 0;
-      indices.push({
-        symbol: index.symbol,
-        name: index.name,
-        shortName: index.shortName,
-        price,
-        previousClose,
-        change,
-        high: Number(meta.regularMarketDayHigh || Math.max(...closes)),
-        low: Number(meta.regularMarketDayLow || Math.min(...closes)),
-        volume: Number(meta.regularMarketVolume || 0),
-        timestamp: timestamp * 1000
-      });
-    }
+    const scanner = await postJson('https://scanner.tradingview.com/india/scan', {
+      symbols: { tickers: ['NSE:NIFTY', 'BSE:SENSEX', 'NSE:BANKNIFTY'], query: { types: [] } },
+      columns: ['close', 'change', 'change_abs', 'high', 'low', 'description', 'name', 'update_mode']
+    });
+    const specs = [
+      { symbol: '^NSEI', name: 'NIFTY 50', shortName: 'NIFTY' },
+      { symbol: '^BSESN', name: 'SENSEX', shortName: 'SENSEX' },
+      { symbol: '^NSEBANK', name: 'NIFTY BANK', shortName: 'BANKNIFTY' }
+    ];
+    const indices = (scanner.data || []).map((item, index) => {
+      const spec = specs[index];
+      const price = Number(item.d[0]);
+      const change = Number(item.d[1]);
+      return { ...spec, price, previousClose: change ? price / (1 + change / 100) : price, change, high: Number(item.d[3]), low: Number(item.d[4]), volume: 0, timestamp: Date.now() };
+    }).filter((item) => item.price > 0);
     if (!indices.length) throw new Error('No NSE/SENSEX index data returned');
     latest = indices;
     upstreamReady = true;
-    const message = JSON.stringify({ type: 'indices', data: indices, source: 'Yahoo Finance / NSE & BSE', timestamp: Date.now() });
+    const message = JSON.stringify({ type: 'indices', data: indices, source: 'TradingView / NSE & BSE', timestamp: Date.now() });
     for (const client of clients) {
       if (client.readyState === WebSocket.OPEN) client.send(message);
     }
@@ -161,7 +164,7 @@ async function fetchIndiaIndices() {
 
 app.get('/api/indices', async (_req, res) => {
   await fetchIndiaIndices();
-  res.json({ source: 'Yahoo Finance / NSE & BSE', timestamp: Date.now(), data: latest });
+  res.json({ source: 'TradingView / NSE & BSE', timestamp: Date.now(), data: latest });
 });
 
 app.get('/api/history/:symbol', async (req, res) => {
@@ -192,8 +195,8 @@ app.get('/api/history/:symbol', async (req, res) => {
 
 wss.on('connection', (socket) => {
   clients.add(socket);
-  socket.send(JSON.stringify({ type: 'connected', source: 'Yahoo Finance / NSE & BSE', timestamp: Date.now() }));
-  if (latest.length) socket.send(JSON.stringify({ type: 'indices', data: latest, source: 'Yahoo Finance / NSE & BSE', timestamp: Date.now() }));
+  socket.send(JSON.stringify({ type: 'connected', source: 'TradingView / NSE & BSE', timestamp: Date.now() }));
+  if (latest.length) socket.send(JSON.stringify({ type: 'indices', data: latest, source: 'TradingView / NSE & BSE', timestamp: Date.now() }));
   socket.on('close', () => clients.delete(socket));
   socket.on('error', (error) => console.error('Client socket error:', error.message));
 });
