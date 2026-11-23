@@ -5,6 +5,7 @@ const cors = require('cors');
 const http = require('http');
 const WebSocket = require('ws');
 const https = require('https');
+const path = require('path');
 
 const app = express();
 app.use(cors());
@@ -202,4 +203,11 @@ server.listen(port, () => {
   console.log(`TradingZolo India market relay listening on http://localhost:${port}`);
   fetchIndiaIndices();
   restTimer = setInterval(fetchIndiaIndices, 15000);
+});
+
+const distDir = path.join(__dirname, 'dist', 'trading-zolo', 'browser');
+app.use(express.static(distDir));
+app.get(/.*/, (req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/stream') return next();
+  res.sendFile(path.join(distDir, 'index.html'));
 });

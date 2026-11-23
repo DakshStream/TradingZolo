@@ -24,7 +24,7 @@ export class IndiaMarketService {
 
   connect(): void {
     this.status.set(this.retry ? 'reconnecting' : 'connecting');
-    this.socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.hostname}:8080/stream`);
+    this.socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/stream`);
     this.socket.onopen = () => this.zone.run(() => {
       this.retry = 0;
       this.status.set('live');
@@ -48,7 +48,7 @@ export class IndiaMarketService {
     const selected = encodeURIComponent(this.selected());
     const range = this.range();
     try {
-      const response = await fetch(`http://localhost:8080/api/history/${selected}?range=${range}`);
+      const response = await fetch(`/api/history/${selected}?range=${range}`);
       if (!response.ok) throw new Error(`History request failed: ${response.status}`);
       const payload = await response.json();
       this.chartPoints.set((payload.points || []).map((point: ChartPoint) => ({ time: point.time, close: Number(point.close) })));
