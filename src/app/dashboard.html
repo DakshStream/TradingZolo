@@ -38,12 +38,21 @@
             <button [class.active]="market.range() === '1y'" (click)="market.selectRange('1y')">1 Year</button>
           </div>
         </div>
-        <div class="chart-wrap">
+        <div class="chart-wrap" (mousemove)="onChartMove($event)" (mouseleave)="clearChartHover()">
           <svg viewBox="0 0 800 300" preserveAspectRatio="none" role="img" aria-label="Live index price chart">
             <defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a6ff4d" stop-opacity=".28"/><stop offset="1" stop-color="#a6ff4d" stop-opacity="0"/></linearGradient></defs>
             <g class="grid"><line x1="10" y1="60" x2="790" y2="60"/><line x1="10" y1="150" x2="790" y2="150"/><line x1="10" y1="240" x2="790" y2="240"/></g>
-            <path class="area" [attr.d]="chartArea()"/><path class="line" [attr.d]="chartPath()"/> 
+            <path class="area" [attr.d]="chartArea()"/><path class="line" [attr.d]="chartPath()"/>
+            @if (hover(); as point) {
+              <line class="hover-line" [attr.x1]="point.x" [attr.x2]="point.x" y1="10" y2="290"/>
+              <circle class="hover-dot" [attr.cx]="point.x" [attr.cy]="point.y" r="5"/>
+            }
           </svg>
+          @if (hover(); as point) {
+            <div class="chart-tooltip" [style.left.%]="point.x / 800 * 100" [style.top.px]="point.y">
+              <span>{{ point.label }}</span><strong>{{ formatPrice(point.price) }}</strong>
+            </div>
+          }
           <div class="chart-status"><i></i>{{ market.status() }} · {{ formatTime(market.lastUpdated()) }}</div>
         </div>
       </section>
